@@ -239,40 +239,37 @@ internal class StatisticsPane:GridPane()
 
         private fun enqueueRunnable()
         {
+            // process bytes sent lat second
+            val bytesSentLastSecond = synchronized(bytesSentLastSecond)
+            {
+                // remove expired bytes sent last second
+                while (bytesSentLastSecond.poll() != null);
+
+                // return a snapshot of the array's contents
+                bytesSentLastSecond.toTypedArray()
+            }
+
+            // calculate throughput
+            val throughputData = bytesSentLastSecond.sumBy {it.byteCount}
+
+            // calculate usageByPort
+            val usageByPortPieData = bytesSentLastSecond
+                .groupBy {it.port.toString()}
+                .mapValues {it.value.sumBy {it.byteCount}.toDouble()}
+                .plus("unused" to (maxThroughput-throughput).toDouble())
+
+            // calculate usageByConnection
+            val usageByConnectionPieData = bytesSentLastSecond
+                .groupBy {"${it.connection.hostString}:${it.connection.port}"}
+                .mapValues {it.value.sumBy {it.byteCount}.toDouble()}
+                .plus("unused" to (maxThroughput-throughput).toDouble())
+
+            // update the GUI
             Platform.runLater()
             {
-                val bytesSentLastSecond = synchronized(bytesSentLastSecond)
-                {
-                    // remove expired bytes sent last second
-                    while (bytesSentLastSecond.poll() != null);
-
-                    // return a snapshot of the array's contents
-                    bytesSentLastSecond.toTypedArray()
-                }
-
-                // update throughput
-                throughput = bytesSentLastSecond.sumBy {it.byteCount}
-
-                // update usageByPort
-                run()
-                {
-                    val pieData = bytesSentLastSecond
-                        .groupBy {it.port.toString()}
-                        .mapValues {it.value.sumBy {it.byteCount}.toDouble()}
-                        .plus("unused" to (maxThroughput-throughput).toDouble())
-                    updatePieChart(usageByPortDisplay,pieData)
-                }
-
-                // update usageByConnection
-                run()
-                {
-                    val pieData = bytesSentLastSecond
-                        .groupBy {"${it.connection.hostString}:${it.connection.port}"}
-                        .mapValues {it.value.sumBy {it.byteCount}.toDouble()}
-                        .plus("unused" to (maxThroughput-throughput).toDouble())
-                    updatePieChart(usageByConnectionDisplay,pieData)
-                }
-
+                throughput = throughputData
+                updatePieChart(usageByPortDisplay,usageByPortPieData)
+                updatePieChart(usageByConnectionDisplay,usageByConnectionPieData)
                 isRunnablePendingExecutionLock.withLock()
                 {
                     isRunnablePendingExecution = false
