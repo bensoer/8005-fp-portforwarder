@@ -14,7 +14,9 @@ import java.util.*
 import java.util.concurrent.DelayQueue
 import java.util.concurrent.Delayed
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.thread
+import kotlin.concurrent.withLock
 
 internal class StatisticsPane:GridPane()
 {
@@ -214,7 +216,28 @@ internal class StatisticsPane:GridPane()
 
     private inner class UpdateGuiTask:TimerTask()
     {
+        private val isRunnablePendingExecutionLock = ReentrantLock()
+
+        private var isRunnablePendingExecution = false
+
+            set(value)
+            {
+                assert(isRunnablePendingExecutionLock.isHeldByCurrentThread)
+            }
+
         override fun run()
+        {
+            isRunnablePendingExecutionLock.withLock()
+            {
+                if (!isRunnablePendingExecution)
+                {
+                    isRunnablePendingExecution = true
+                    enqueueRunnable()
+                }
+            }
+        }
+
+        private fun enqueueRunnable()
         {
             Platform.runLater()
             {
@@ -245,6 +268,10 @@ internal class StatisticsPane:GridPane()
                             .plus("unused" to (maxThroughput-throughput).toDouble())
                         updatePieChart(usageByConnectionDisplay,pieData)
                     }
+                }
+                isRunnablePendingExecutionLock.withLock()
+                {
+                    isRunnablePendingExecution = false
                 }
             }
         }
